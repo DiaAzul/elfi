@@ -713,6 +713,7 @@ class SMC(Sampler):
             return
 
         # Sample from the proposal, condition on actual prior
+        # Size is not just batch size but also, needs parameters in batch as tuple
         params = GMDistribution.rvs(*self._gm_params, size=self.batch_size,
                                     prior_logpdf=self._prior.logpdf,
                                     random_state=self._round_random_state)

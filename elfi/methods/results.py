@@ -12,6 +12,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
+
 from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
 
 logger = logging.getLogger(__name__)

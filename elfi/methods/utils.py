@@ -13,7 +13,7 @@ from elfi.model.elfi_model import ComputationContext
 logger = logging.getLogger(__name__)
 
 
-def arr2d_to_batch(x, names):
+def arr2d_to_batch(x, names): 
     """Convert a 2d array to a batch dictionary columnwise.
 
     Parameters
@@ -30,6 +30,8 @@ def arr2d_to_batch(x, names):
 
     """
     # TODO: support vector parameter nodes
+    # TODO <--- FOLLOWING LINE IS A TEMPORARY FIX --->
+    saved_x_shape = x.shape
     try:
         x = x.reshape((-1, len(names)))
     except BaseException:
@@ -37,6 +39,10 @@ def arr2d_to_batch(x, names):
                          "This may be caused by multidimensional "
                          "prior nodes that are not yet supported.")
     batch = {p: x[:, i] for i, p in enumerate(names)}
+
+    # TODO <--- FOLLOWING LINE IS A TEMPORARY FIX --->
+    batch['age'] = np.reshape(batch['age'], saved_x_shape)
+
     return batch
 
 
@@ -155,6 +161,12 @@ class GMDistribution:
 
         d = np.zeros(len(x))
         for m, w in zip(means, weights):
+            # Run down list of x and compute pdf against each alpha
+            # for i, x1 in zip(range(np.size(x, axis=0)), x):
+            #     x1 = np.where(x1, x1, 10e-10)  # Avoid zero xs as these tend to infinity
+            #     x1 /= np.sum(x1)
+            #     m = np.where(m, m, 10e-10)  # Avoid zero alphas as these tend to infinity
+            #     d[i] += w * np.nan_to_num(ss.dirichlet.pdf(x1, alpha=m))
             d += w * ss.multivariate_normal.pdf(x, mean=m, cov=cov)
 
         # Cast to correct ndim
@@ -218,20 +230,36 @@ class GMDistribution:
         trials = 0
 
         while n_accepted < size:
+
+            # TODO Develop this section to use Dirichlet distribution rather than multivariate
+            # normal. But consider how we build in concept of covariance matrix. --->
+
+            # Following selects means based upon a probability determined by weights
             inds = random_state.choice(len(means), size=n_left, p=weights)
             rvs = means[inds]
-            perturb = ss.multivariate_normal.rvs(mean=means[0] * 0,
-                                                 cov=cov,
-                                                 random_state=random_state,
-                                                 size=n_left)
-            x = rvs + perturb
+
+            #perturb = ss.multivariate_normal.rvs(mean=means[0] * 0,
+            #                                     cov=cov,
+            #                                     random_state=random_state,
+            #                                     size=n_left)
+            #x = rvs + perturb
+
+            conc = 1
+            x = np.empty_like(rvs)
+            for i in range(np.size(x, 0)):
+                x[i, :] = ss.dirichlet.rvs(rvs[i, :] * conc)
 
             # check validity of x
             if prior_logpdf is not None:
-                x = x[np.isfinite(prior_logpdf(x))]
+                # TODO NEED TO DOUBLE CHECK TRANSPOSE (reshape with newaxis)
+                a = np.transpose(np.atleast_2d(np.isfinite(prior_logpdf(x))))
+                x = x[a.any(axis=1)]
 
             n_accepted1 = len(x)
-            output[n_accepted: n_accepted+n_accepted1] = x
+            if(x.ndim <= 1):
+                output[n_accepted: n_accepted+n_accepted1] = x
+            else:
+                output[n_accepted: n_accepted+n_accepted1, :] = x
             n_accepted += n_accepted1
             n_left -= n_accepted1
 
@@ -366,9 +394,16 @@ class ModelPrior:
             node = self._pdf_node
 
         x = np.asanyarray(x)
+        # TODO <--- FOLLOWING LINE IS A TEMPORARY FIX --->
+        saved_x_shape = x.shape
         ndim = x.ndim
-        x = x.reshape((-1, self.dim))
+        # <--- This is collapsing array to a single column, why? 
+        # Note: to_batch is copy of earlier function arr2d_to_batch
+        x = x.reshape((-1, self.dim)) 
         batch = self._to_batch(x)
+        # TODO <--- FOLLOWING LINE IS A TEMPORARY FIX --->
+        batch['age'] = np.reshape(batch['age'], saved_x_shape)
+        # print("batch_age.shape", batch['age'].shape)
 
         # TODO: we could add a seed value that would load a "random state" instance
         #       throwing an error if it is used, for instance seed="not used".

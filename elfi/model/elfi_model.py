@@ -885,6 +885,7 @@ class Prior(RandomVariable):
         Scipy distributions: https://docs.scipy.org/doc/scipy-0.19.0/reference/stats.html
 
         """
+
         super(Prior, self).__init__(distribution, *params, size=size, **kwargs)
         self['_parameter'] = True
 
